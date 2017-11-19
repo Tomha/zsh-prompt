@@ -6,10 +6,11 @@ make() {
     
     add_left '$(exit_code_symbolic " ")'
     add_left '$(exec_time_exit_code_colouring " ")'
-    add_left '$(username " " "" $CYAN)'
     add_left '$(directory_short " " "" $BLUE 3)'
-    
-    add_left '$(git_branch_coloured " " "")'
+
+    add_left '$(git_branch_ahead_colouring " " "")'
+    add_left '$(git_ahead_symbolic)'
+    add_left '$(git_working_state_symbolic)'
     
     add_left '$(privilege_prompt_plain " " " " ">")'
         
@@ -53,6 +54,7 @@ ICON_VOLUME_MUTE="✕"
 ICON_VOLUME_3=" "
 ICON_VOLUME_2=" "
 ICON_VOLUME_1=" "
+ICON_GIT=""
 
 # Git - Need to check upstream exists
 
@@ -565,6 +567,8 @@ function battery_time_remaining() {
 #######################
 # Requires amixer
 
+# TODO: Volume icons that work
+
 function volume_symbolic() {
     local volume_info=$(amixer | grep "Front Left: Playback" | tr -d "[]:%")
     local volume_power=$(echo $volume_info | cut -d " " -f 8)
@@ -609,6 +613,8 @@ function volume_text() {
 #         Git         #
 #######################
 
+# TODO: Count of branchs ahead/behind?
+
 # Show the current git branch if in a git repo.
 # $1=Prefix $2=Suffix $3=Colour
 function git_branch() {
@@ -619,52 +625,66 @@ function git_branch() {
 }
 
 # Show the current git branch if in a git repo, coloured by master ahead/behind state.
-# $1=Prefix $2=Suffix $3=Colour
-function git_branch_coloured() {
+# $1=Prefix $2=Suffix
+function git_branch_ahead_colouring() {
     if [[ $(git rev-parse --git-dir 2> /dev/null) != "" ]]; then
         local git_branch=$(git rev-parse --abbrev-ref @ 2> /dev/null)
-        local base_commit=$(git merge-base @ @{u})
-        local local_commit=$(git rev-parse @)
-        local remote_commit=$(git rev-parse @{u})
-    
-        echo -n "$1%f"
-    
-        if [[ $local_commit = $remote_commit ]]; then
-            echo -n $GREEN # Up to date
-        elif [[ $local_commit = $base_commit ]]; then
-            echo -n $RED # Behind
-        elif [[ $remote_commit = $base_commit ]]; then
-            echo -n $YELLOW # Ahead
+        if [[ $(git rev-parse @{u} 2> /dev/null) != "" ]]; then
+            local base_commit=$(git merge-base @ @{u})
+            local local_commit=$(git rev-parse @)
+            local remote_commit=$(git rev-parse @{u})
+        
+            echo -n "$1%f"
+        
+            if [[ $local_commit = $remote_commit ]]; then
+                echo -n $GREEN # Up to date
+            elif [[ $local_commit = $base_commit ]]; then
+                echo -n $RED # Behind
+            elif [[ $remote_commit = $base_commit ]]; then
+                echo -n $YELLOW # Ahead
+            else
+                echo -n $PURPLE # Diverged
+            fi
+
+            echo -n "$git_branch%f$2%f"
         else
-            echo -n $PURPLE # Diverged
+            echo -n "$1%f$GREY$git_branch%f$2%f" # No upstream
         fi
-
-        echo -n "$git_branch%f$2%f"
     fi
 }
 
+# Current branch ahead/behind master state as a coloured icon.
+# $1=Prefix $2=Suffix
+function git_ahead_symbolic() {
+    if [[ $(git rev-parse --git-dir 2> /dev/null) != "" ]]; then
+        local git_branch=$(git rev-parse --abbrev-ref @ 2> /dev/null)
+        if [[ $(git rev-parse @{u} 2> /dev/null) != "" ]]; then
+            local base_commit=$(git merge-base @ @{u})
+            local local_commit=$(git rev-parse @)
+            local remote_commit=$(git rev-parse @{u})
+        
+            echo -n "$1%f"
+        
+            if [[ $local_commit = $remote_commit ]]; then
+                echo -n "$GREEN✓" # Up to date
+            elif [[ $local_commit = $base_commit ]]; then
+                echo -n "$RED↓" # Behind
+            elif [[ $remote_commit = $base_commit ]]; then
+                echo -n "$YELLOW↑" # Ahead
+            else
+                echo -n "$PURPLE↗" # Diverged
+            fi
 
-function git_behind_flag() {
-    local colour=$1
-    local prefix=$2
-    local suffix=$3
-    local text=$4
-    
-    if [[ -z $(git rev-parse --git-dir 2> /dev/null) ]] && return
-
-    local behind=$(git rev-list --count HEAD..@{upstream})
-
-    if [[ $behind -gt 0 ]]; then
-        echo -n "$prefix%f$colour$text%f$suffix%f"
+            echo -n "%f$2%f"
+        fi
     fi
 }
 
-function git_uncommitted_stats() {
-    local prefix=$1
-    local suffix=$2
-    
-    if [[ -z $(git rev-parse --git-dir 2> /dev/null) ]] && return
-    if [[ -z $(git status --short 2> /dev/null) ]] && return
+# Number of added/deleted/modified/etc. files in working/staging with coloured text key.
+# $1=Prefix $2=Suffix.
+function git_working_state_text() {   
+    if [[ $(git rev-parse --git-dir 2> /dev/null) == "" ]] && return
+    if [[ $(git status --short 2> /dev/null) == "" ]] && return
     
     local uncommitted_files=$(git status --short | awk '{$1=$1};1')
     local added=$(echo $uncommitted_files | cut -d " " -f 1 | grep "A" | wc -l)
@@ -672,71 +692,75 @@ function git_uncommitted_stats() {
     local modified=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep 'M' | wc -l)
     local renamed=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep 'R' | wc -l)
     local untracked=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep '?' | wc -l)
+
+    echo -n "$1%f"
     
-    echo -n "$prefix%f"
-    
-    if [[ $added -gt 0 ]]; then
-        echo -n "$GREEN$added➕"
-    fi
     if [[ $modified -gt 0 ]]; then
-        echo -n "$YELLOW$modified✱ "
+        echo -n " "$YELLOW$modified"m"
     fi 
+    if [[ $added -gt 0 ]]; then
+        echo -n " "$GREEN$added"a"
+    fi
     if [[ $deleted -gt 0 ]]; then
-        echo -n "$RED$deleted➖"
+        echo -n " "$RED$deleted"d"
     fi
     if [[ $renamed -gt 0 ]]; then
-        echo -n "$BLUE$renamed∙"
+        echo -n " "$BLUE$renamed"r"
     fi
     if [[ $untracked -gt 0 ]]; then
-        echo -n "$GREY$untracked✖ "
+        echo -n " "$GREY$untracked"u"
     fi
     
-    echo -n "%f$suffix%f"
+    echo -n "%f$2%f"
 }
 
-function git_general_stats() {
-    local prefix=$1
-    local suffix=$2
+# Number of added/deleted/modified/etc. files in working/staging with coloured icon key.
+# $1=Prefix $2=Suffix.
+function git_working_state_symbolic() {   
+    if [[ $(git rev-parse --git-dir 2> /dev/null) == "" ]] && return
+    if [[ $(git status --short 2> /dev/null) == "" ]] && return
     
-    if [[ -z $(git rev-parse --git-dir 2> /dev/null) ]] && return
-    if [[ -z $(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2> /dev/null) ]] && return
-    
-    local ahead=$(git rev-list --count @{upstream}..HEAD)
-    local behind=$(git rev-list --count HEAD..@{upstream})
-    local uncommitted=$(git status --short | wc -l)
+    local uncommitted_files=$(git status --short | awk '{$1=$1};1')
+    local added=$(echo $uncommitted_files | cut -d " " -f 1 | grep "A" | wc -l)
+    local deleted=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep 'D' | wc -l)
+    local modified=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep 'M' | wc -l)
+    local renamed=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep 'R' | wc -l)
+    local untracked=$(echo $uncommitted_files | cut -d ' ' -f 1 | grep '?' | wc -l)
 
-    if [[ $uncommitted -eq 0 && $ahead -eq 0 && $behind -eq 0 ]] && return
+    echo -n "$1%f"
     
-    echo -n "$prefix%f"
-    
-    if [[ $ahead -gt 0 ]]; then
-        echo -n "$GREEN$ahead↑"
-    fi
-    if [[ $behind -gt 0 ]]; then
-        echo -n "$RED$behind↓"
-    fi
-    if [[ $uncommitted -gt 0 ]]; then
-        echo -n "$YELLOW$uncommitted✱"
+    if [[ $modified -gt 0 ]]; then
+        echo -n " "$YELLOW$modified"*"
     fi 
-    
-    echo -n "%f$suffix%f"
-}
-
-function git_dirty_flag() {
-    local colour=$1
-    local prefix=$2
-    local suffix=$3
-    local text=$4
-    
-    if [[ -z $(git rev-parse --git-dir 2> /dev/null) ]] && return
-    if [[ -z $(git status --short 2> /dev/null) ]] && return
-    if [[ -z $text ]]; then
-       echo -n "$prefix%f$colour!%f$suffix%f"
-    else
-        echo -n "$prefix%f$colour$text%f$suffix%f"
+    if [[ $added -gt 0 ]]; then
+        echo -n " "$GREEN$added"+"
+    fi
+    if [[ $deleted -gt 0 ]]; then
+        echo -n " "$RED$deleted"-"
+    fi
+    if [[ $renamed -gt 0 ]]; then
+        echo -n " "$BLUE$renamed"^"
+    fi
+    if [[ $untracked -gt 0 ]]; then
+        echo -n " "$GREY$untracked"~"
     fi
     
+    echo -n "%f$2%f"
+}
+
+# Flag to show if current branch is behind master.
+# $1=Prefix $2=Suffix $3=TextColour
+function git_behind_flag() {   
+    if [[ $(git rev-parse --git-dir 2> /dev/null) == "" ]] && return
+    if [[ $(git rev-parse @{u} 2> /dev/null) == "" ]] && return
+
+    local base_commit=$(git merge-base @ @{u})
+    local local_commit=$(git rev-parse @)
+    local remote_commit=$(git rev-parse @{u})
     
+    if [[ $local_commit != $remote_commit && $local_commit == $base_comit ]]; then
+        echo -n "$1%f$3⚑%f$2%f"
+    fi
 }
 
 #=============================================================================#
