@@ -622,9 +622,6 @@ function git_branch() {
 # $1=Prefix $2=Suffix $3=Colour
 function git_branch_coloured() {
     if [[ $(git rev-parse --git-dir 2> /dev/null) != "" ]]; then
-        local local_branch=$(git rev-parse 
-    
-    
         local ahead=$(git rev-list --count @{upstream}..HEAD)
         local behind=$(git rev-list --count HEAD..@{upstream})
         local uncommitted=$(git status --short | wc -l)
