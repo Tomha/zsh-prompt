@@ -9,7 +9,7 @@ make() {
     add_left '$(username " " "" $CYAN)'
     add_left '$(directory_short " " "" $BLUE 3)'
     
-    add_left '$(git_branch " " "" $YELLOW)'
+    add_left '$(git_branch_coloured " " "")'
     
     add_left '$(privilege_prompt_plain " " " " ">")'
         
@@ -163,7 +163,7 @@ echo -n "$1%f$3$(du -sh | cut -f 1)%f$2%f"
 # $1=Prefix $2=Suffix $3=TextColour
 function exec_time() {
     if [[ $last_exec_time ]]; then    
-        echo -n "$1%f$3$last_exec_time%f$2%f"
+        echo -n "$1%f$3"$last_exec_time"s%f$2%f"
     fi
 }
 
@@ -171,14 +171,14 @@ function exec_time() {
 # $1=Prefix $2=Suffix $3=TextColour $4=$ShowIfLongerThan
 function exec_time_if_longer_than() {
     if [[ $last_exec_time ]] && (($last_exec_time > $4 )); then        
-            echo -n "$1%f$3$last_exec_time%f$2%f"
+            echo -n "$1%f$3"$last_exec_time"s%f$2%f"
     fi
 }
 
 # Last command execution time (seconds) coloured by exit code.
 # $1=Prefix $2=Suffix
 function exec_time_exit_code_colouring() {
-    echo -n "$1%f%(0?.$GREEN.%(127?.$YELLOW.%(130?.$GREY.$RED)))$last_exec_time%f$2%f"
+    echo -n "$1%f%(0?.$GREEN.%(127?.$YELLOW.%(130?.$GREY.$RED)))"$last_exec_time"s%f$2%f"
 }
 
 #######################
@@ -618,26 +618,28 @@ function git_branch() {
     fi
 }
 
-# Show the current git branch if in a git repo, coloured by working directory status.
+# Show the current git branch if in a git repo, coloured by master ahead/behind state.
 # $1=Prefix $2=Suffix $3=Colour
 function git_branch_coloured() {
     if [[ $(git rev-parse --git-dir 2> /dev/null) != "" ]]; then
-        local ahead=$(git rev-list --count @{upstream}..HEAD)
-        local behind=$(git rev-list --count HEAD..@{upstream})
-        local uncommitted=$(git status --short | wc -l)
-        
-        echo -n "$prefix%f"
-        
-        if [[ $uncommitted -gt 0 ]]; then
-            echo -n "$RED"
-        elif [[ ahead -gt 0 || $behind -gt 0 ]]; then
-            echo -n "$YELLOW"
+        local git_branch=$(git rev-parse --abbrev-ref @ 2> /dev/null)
+        local base_commit=$(git merge-base @ @{u})
+        local local_commit=$(git rev-parse @)
+        local remote_commit=$(git rev-parse @{u})
+    
+        echo -n "$1%f"
+    
+        if [[ $local_commit = $remote_commit ]]; then
+            echo -n $GREEN # Up to date
+        elif [[ $local_commit = $base_commit ]]; then
+            echo -n $RED # Behind
+        elif [[ $remote_commit = $base_commit ]]; then
+            echo -n $YELLOW # Ahead
         else
-            echo -n "$GREEN"
+            echo -n $PURPLE # Diverged
         fi
 
-        echo -n $(git rev-parse --abbrev-ref HEAD)
-        echo -n "%f$suffix%f"
+        echo -n "$git_branch%f$2%f"
     fi
 }
 
