@@ -13,13 +13,17 @@ make() {
     add_left '$(git_working_state_symbolic)'
     
     add_left '$(privilege_prompt_plain " " " " ">")'
-        
+
     PROMPT+="%b"
 
     RPROMPT="%B"
     
-    add_right '$(time_12 "" "" $YELLOW)'
-    
+    add_right '$(wifi_status_symbolic " ")'
+    add_right '$(wifi_status_text_if_connected " ")'
+    add_right '$(bluetooth_status_symbolic " ")'
+    add_right '$(bluetooth_status_text_if_connected " " "" $BLUE)'
+    add_right '$(battery_percentage_symbolic " ")'
+
     RPROMPT+="%b "
 }
 
@@ -341,7 +345,7 @@ function wifi_status_symbolic() {
     local wifi_state=$(nmcli radio wifi 2> /dev/null)
     local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
 
-    if [[ $wifi_state -eq "enabled" ]]; then
+    if [[ $wifi_state == "enabled" ]]; then
         if [[ $wifi_network == "--" ]]; then
             echo -n $WHITE
         elif [[ $wifi_network == "(configuring)" ]]; then
@@ -355,7 +359,7 @@ function wifi_status_symbolic() {
         echo -n $GREY
     fi
     
-    echo -n "$WIFI_ICON%f$2%f"
+    echo -n "$ICON_WIFI%f$2%f"
 }
 
 # WiFi connection state as text description.
@@ -366,7 +370,7 @@ function wifi_status_text() {
     local wifi_state=$(nmcli radio wifi 2> /dev/null)
     local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
 
-    if [[ $wifi_state -eq "enabled" ]]; then
+    if [[ $wifi_state == "enabled" ]]; then
         if [[ $wifi_network == "--" ]]; then
             echo -n $RED"disconnected"
         elif [[ $wifi_network == "(configuring)" ]]; then
@@ -389,7 +393,7 @@ function wifi_status_text_if_enabled() {
     local wifi_state=$(nmcli radio wifi 2> /dev/null)
     local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
 
-    if [[ $wifi_state -eq "enabled" ]]; then
+    if [[ $wifi_state == "enabled" ]]; then
         if [[ $wifi_network == "--" ]]; then
             echo -n "%f$2%f"$RED"disconnected$1%f"
         elif [[ $wifi_network == "(configuring)" ]]; then
@@ -401,13 +405,13 @@ function wifi_status_text_if_enabled() {
 }
 
 # WiFi connection state as text description if connected to a network.
-# $1=Prefix $2=Suffix
+# $1=Prefix $2=Suffix $TextColour
 function wifi_status_text_if_connected() {
     local wifi_state=$(nmcli radio wifi 2> /dev/null)
     local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
 
     if [[ $wifi_state == "enabled" && $wifi_network != "" && $wifi_network != "(configuring)" && $wifi_network != "--" ]]; then
-        echo -n $1%f$3$network%f$2%f
+        echo -n $1%f$GREEN$3$wifi_network%f$2%f
     fi
 }
 
@@ -447,7 +451,7 @@ function bluetooth_status_symbolic() {
         echo -n $GREY
     fi
     
-    echo -n "$BLUETOOTH_ICON%f$2%f"
+    echo -n "$ICON_BLUETOOTH%f$2%f"
 }
 
 function bluetooth_status_text() {
@@ -507,7 +511,7 @@ function battery_status_text() {
 }
 
 function battery_percentage_symbolic() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",")
+    local battery_info=$(acpi 2> /dev/null | tr -d ",%")
     local battery_percentage=$(echo $battery_info | cut -d " " -f 4)
 
     echo -n "%f$1%f"
@@ -524,7 +528,7 @@ function battery_percentage_symbolic() {
         echo -n $RED$ICON_BATTERY_1
     fi
     
-    echo -n "$battery_percentage%%f$2%f"
+    echo -n "%f$2%f"
 }
 
 function battery_percentage_text() {
