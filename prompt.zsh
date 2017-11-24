@@ -4,25 +4,27 @@ unsetopt sh_word_split
 make() {
     PROMPT="%B"
     
-    add_left '$(exit_code_symbolic " ")'
-    add_left '$(exec_time_exit_code_colouring " ")'
-    add_left '$(directory_short " " "" $BLUE 3)'
+    add_left '$(exit_code_symbolic $(colour_exit_code) " ")'
+    add_left '$(exec_time $(colour_exit_code) " ")'
+    add_left '$(username $CYAN " ")'
+    add_left '$(directory_short $BLUE " " "" 3)'
 
-    add_left '$(git_branch_ahead_colouring " " "")'
-    add_left '$(git_ahead_symbolic)'
-    add_left '$(git_working_state_symbolic)'
+    #add_left '$(git_branch_ahead_colouring " " "")'
+    #add_left '$(git_ahead_symbolic)'
+    #add_left '$(git_working_state_symbolic)'
     
-    add_left '$(privilege_prompt_plain " " " " ">")'
+    add_left '$(job_count $RED " [" "]" 1)'
+    add_left '$(privilege $(colour_privilege) " " " " ">" ">")'
 
     PROMPT+="%b"
 
     RPROMPT="%B"
     
-    add_right '$(wifi_status_symbolic " ")'
-    add_right '$(wifi_status_text_if_connected " ")'
-    add_right '$(bluetooth_status_symbolic " ")'
-    add_right '$(bluetooth_status_text_if_connected " " "" $BLUE)'
-    add_right '$(battery_percentage_symbolic " ")'
+    #add_right '$(wifi_status_symbolic " ")'
+    #add_right '$(wifi_status_text_if_connected " ")'
+    #add_right '$(bluetooth_status_symbolic " ")'
+    #add_right '$(bluetooth_status_text_if_connected " " "" $BLUE)'
+    #add_right '$(battery_percentage_symbolic " ")'
 
     RPROMPT+="%b "
 }
@@ -46,6 +48,10 @@ PURPLE="%F{5}"
 CYAN="%F{6}"
 WHITE="%F{7}"
 
+ICON_TICK="✔"
+ICON_CROSS="✘"
+ICON_ROOT="#"
+ICON_USER="$"
 # Requires Font Awesome
 ICON_WIFI=" "
 ICON_BLUETOOTH=""
@@ -77,259 +83,133 @@ function add_right() {
 	RPROMPT+="$1%f"
 }
 
-#================================= METHODS ===================================#
+#================================= COLOURS ===================================#
+#             Use to provide conditional colouring to a component             #
+#=============================================================================#
 
-#######################
-#      Date/Time      #
-#######################
+# Colour based on exit code of last command.
+function colour_exit_code() {
+    echo "%(0?.$GREEN.%(127?.$YELLOW.%(130?.$GREY.$RED)))"
+}
 
-# DD/MM/YY formatted date
-# $1=Prefix $2=Suffix $3=TextColour
+# Colour based on current privilege level.
+function colour_privilege() {
+ echo "%(!.$RED.$GREEN)"
+}
+
+#============================ VANILLA COMPONENTS =============================#
+#     Unless otherwise stated, $1 = Colour, $2 = Prefix, and $3 = Suffix      #
+#=============================================================================#
+
+# Date as "DD/MM/YY"
 function date_short() {
-    echo -n "$1%f$3%D{%d/%m/%y}%f$2%f"
+    echo $1$2%D{%d/%m/%y}$3%f
 }
 
-# Mon 01 Jan 2017 formatted date
-# $1=Prefix $2=Suffix $3=TextColour
-function date_long() {  
-    echo -n "$1%f$3%D{%a %d %b %Y}%f$2%f"
+# Date as "Day DD Mon YYYY"
+function date_long() {
+    echo $1$2%D{%a %d %b %Y}$2%f
 }
 
-# 12 Hour Time with AM/PM
-# $1=Prefix $2=Suffix $3=TextColour
-function time_ampm() {    
-	echo "$1%f$3%D{%r}%f$2%f"
+# 12 Hour Time as "HH:MM:SS AM"
+function time_ampm() {
+	echo $1$2%D{%r}$2%f
 }
 
-# 12 Hour Time without AM/PM
-# $1=Prefix $2=Suffix $3=TextColour
-function time_12() {    
-	echo "$1%f$3%D{%I:%M:%S}%f$2%f"
+# 12 Hour Time as "HH:MM:SS"
+function time_12() {
+	echo $1$2%D{%I:%M:%S}$2%f
 }
 
-# 24 Hour Time
-# $1=Prefix $2=Suffix $3=TextColour
-function time_24() {    
-    echo "$1%f$3%D{%H:%M:%S}%f$2%f"
+# 24 Hour Time as "HH:MM:SS"
+function time_24() {
+    echo $1$2%D{%H:%M:%S}$3%f
 }
 
-
-#######################
-#      Directory      #
-#######################
-
-# Directory starting at /
-# $1=Prefix $2=Suffix $3=TextColour $4=LevelsToShow
-function directory_full() {   
-    echo -n "$1%f$3%$4/%f$2%f"
+# Fully qualified directory. $4 = Number of levels to show.
+function directory_full() {
+    echo $1$2%$4/$3%f
 }
 
-# Directory starting at ~ if in home directory
-# $1=Prefix $2=Suffix $3=TextColour $4=LevelsToShow
+# Directory starting at "~" if in "/home/user". $4 = Number of levels to show.
 function directory_short() {
-    echo -n "$1%f$3%$4~%f$2%f"
+    echo $1$2%$4~$3%f
 }
 
-# Number of visible files in current directory.
-# $1=Prefix $2=Suffix $3=TextColour
-function directory_file_count() {
-    echo -n "$1%f$3$(ls -1 | wc -l)%f$2%f"
+# Number of visible files/directories in current directory.
+function file_count() {
+    echo $1$2$(ls -1 | wc -l)$3%f
 }
 
-# Number of all files in current directory.
-# $1=Prefix $2=Suffix $3=TextColour
-function directory_file_count_all() {
-    echo -n "$1%f$3$(ls -1A | wc -l)%f$2%f"
+# Number of all files/directories in current directory.
+function file_count_all() {
+    echo $1$2$(ls -1A | wc -l)$3%f
 }
 
 # Size of visible files in the current directory.
-# $1=Prefix $2=Suffix $3=TextColour
-function directory_file_size() {
-    echo -n "$1%f$3$(ls -sh | head -1 | cut -d " " -f 2)%f$2%f"
+function file_size() {
+    echo $1$2$(ls -sh | head -1 | cut -d" " -f2)$3%f
 }
 
-# Size of all files in the current directory (only).
-# $1=Prefix $2=Suffix $3=TextColour
-function directory_file_size_all() {
-    echo -n "$1%f$3$(ls -ash | head -1 | cut -d " " -f 2)%f$2%f"
+# Size of all files in the current directory.
+function file_size_all() {
+    echo $1$2$(ls -sha | head -1 | cut -d" " -f2)$3%f
 }
 
-# Recursive size of all files and directories (SLOW).
-# $1=Prefix $2=Suffix $3=TextColour
-function directory_total_size_slow() {
-    echo -n "$1%f$3$(du -sh | cut -f 1)%f$2%f"
-echo -n "$1%f$3$(du -sh | cut -f 1)%f$2%f"
+# Size of all files and directories in the current directory. (VERY SLOW)
+function file_and_directory_size() {
+    echo -n $1$2$(du -sh | cut -f 1)$3%f
 }
 
-#######################
-# Command Exec Times  #
-#######################
-
-# Last command execution time (seconds).
-# $1=Prefix $2=Suffix $3=TextColour
+# Execution time of last command in seconds.
 function exec_time() {
-    if [[ $last_exec_time ]]; then    
-        echo -n "$1%f$3"$last_exec_time"s%f$2%f"
-    fi
+    if [[ -z $last_exec_time ]] && return
+    echo $1$2$last_exec_time"s"$3%f
 }
 
-# Last command execution time (seconds) if longer than.
-# $1=Prefix $2=Suffix $3=TextColour $4=$ShowIfLongerThan
-function exec_time_if_longer_than() {
-    if [[ $last_exec_time ]] && (($last_exec_time > $4 )); then        
-            echo -n "$1%f$3"$last_exec_time"s%f$2%f"
-    fi
+# Number of background jobs. (Optional) Only show if greater than $4.
+function job_count() {
+    echo "%($4j.$1$2%j$3%f.)"
 }
 
-# Last command execution time (seconds) coloured by exit code.
-# $1=Prefix $2=Suffix
-function exec_time_exit_code_colouring() {
-    echo -n "$1%f%(0?.$GREEN.%(127?.$YELLOW.%(130?.$GREY.$RED)))"$last_exec_time"s%f$2%f"
+# Depth of current shell. (Optional) Only show if greater than $4.
+function shell_level() {
+	echo "%$4(L.$1$2%L$3%f.)"
 }
 
-#######################
-#     Job Counts      #
-#######################
-
-# Number of background jobs.
-# $1=Prefix $2=Suffix $3=TextColour
-function job_count() {   
-    echo -n "$1%f$3%j%f$2%f"
-}
-
-# Number of background jobs if greater than.
-# $1=Prefix $2=Suffix $3=TextColour $4=ShowIfAtLeast
-function job_count_if_at_least() {
-    echo -n "%($4j.$1%f$3%j%f$2%f.)"
-}
-
-#######################
-#     Shell Level     #
-#######################
-
-# Depth of current shell.
-# $1=Prefix $2=Suffix $3=TextColour
-function shell_level() {    
-	echo "$1%f$3%L%f$2%f"
-}
-
-# Depth of current shell if greater than.
-# $1=Prefix $2=Suffix $3=TextColour $4=ShowIfAtLeast
-function shell_level_if_at_least() {    
-	echo "%$4(L.$1%f$3%L%f$2%f.)"
-}
-
-#######################
-#    Terminal Info    #
-#######################
-
-# Name of the current terminal, e.g. /dev/tty0, with /dev stripped.
-# $1=Prefix $2=Suffix $3=TextColour
+# Terminal name/number, e.g. tty1
 function terminal_number() {
-    echo "$1%f$3%l%f$2%f"
+    echo $1$2%l$3%f
 }
-
-#######################
-#      Username       #
-#######################
 
 # Username.
-# $1=Prefix $2=Suffix $3=TextColour
 function username() {
-        echo "$1%f$3%n%f$2%f"
+    echo $1$2%n$3%f
 }
 
-#######################
-#      Hostname       #
-#######################
-
-# Simple hostname e.g. myhost
-# $1=Prefix $2=Suffix $3=TextColour
-function hostname() {    
-    echo -n "$1%f$3%m%f$2%f"
+# Hostname.
+function hostname() {
+    echo $1$2%m$3%f
 }
 
-# Fully qualified hostname e.g. myhost.mydomain
-# $1=Prefix $2=Suffix $3=TextColour
-function hostname_full() {    
-    echo -n "$1%f$3%M%f$2%f"
+# Fully qualified hostname, e.g. myhost.mydomain.
+function hostname_fully_qualified() {
+    echo $1$2%M$3%f
 }
 
-# Fully qualified hostname if connected over ssh.
-# $1=Prefix $2=Suffix $3=TextColour
-function hostname_if_in_ssh() {   
-    if [[ $SSH_CONNECTION ]]; then
-        echo -n "$1%f$3%M%f$2%f"
-    fi
-}
-
-#######################
-#      Exit Code      #
-#######################
-
-# Last command exit code.
-# $1=Prefix $2=Suffix
+# Exit code of last command.
 function exit_code() {
-    echo -n "$1%f$3%?%f$2%f"
+    echo $1$2"%?"$3%f
 }
 
-# Last command exit code, coloured.
-# Green = Success. Yellow = Unknown Command. Red = Failure. Grey = Ctrl+C.
-# $1=Prefix $2=Suffix
-function exit_code_coloured() {
-    echo -n "$1%f%(0?.$GREEN?.%(127?.$YELLOW?.%(130?.$GREY?.$RED?)))%f$2%f"
+# Exit code of last command represented by icons.
+function exit_code_symbolic() {
+    echo $1$2"%(0?.$ICON_TICK.$ICON_CROSS)"$3%f
 }
 
-# Last command's exit code, coloured icon.
-# Green = Success. Yellow = Unknown Command. Red = Failure. Grey = Ctrl+C.
-# $1=Prefix $2=Suffix
-function exit_code_symbolic() {    
-    echo -n "$1%f%(0?.$GREEN✔.%(127?.$YELLOW✘.%(130?.$GREY✘.$RED✘)))%f$2%f"
-}
-
-#######################
-#   Privilege Level   #
-#######################
-
-# Text to show only when running privileged.
-# $1=Prefix $2=Suffix $3=TextColour
-function privilege_flag() {
-    echo -n "%(!.$1%f$3%f$2%f.)"
-}
-
-# Last command exit code, coloured.
-# $1=Prefix $2=Suffix $3=RootText $4=UserText
-function privilege_text() {
-    echo -n "$1%f%(!.$3.$4)%f$2%f"
-}
-
-
-# Username coloured by privilege level
-# $1=Prefix $2=Suffix
-function privilege_username() {
-    echo -n "$1%f%(!.$RED%n.$GREEN%n)%f$2%f"
-}
-
-#######################
-#       Prompts       #
-#######################
-
-# Prompt char coloured by exit code of last command.
-# $1=Prefix $2=Suffix $3=PromptChar
-function exit_code_prompt() {
-    echo -n "$1%f%(0?.$GREEN.%(127?.$YELLOW.%(130?.$GREY.$RED)))$3%f$2%f"
-}
-
-# Prompt char set and coloured by privilege level.
-# $1=Prefix $2=Suffix
-function privilege_prompt() {
-    echo -n "$1%f%(!.$RED#.$GREEN$)%f$2%f"
-}
-
-# Prompt char coloured by privilege level.
-# $1=Prefix $2=Suffix $3=PromptChar
-function privilege_prompt_plain() {   
-    echo -n "$1%f%(!.$RED.$GREEN)$3%f$2%f"
+# Privilege level displayed as $4 if root or $5 if user.
+function privilege() {
+    echo $1$2"%(!.$4.$5)"$3%f
 }
 
 #######################
@@ -779,21 +659,5 @@ function precmd() {
     fi
 	unset timer
 }
-
-#=============================================================================#
-
-# MAX LENGTH INCLUDES ANY FOLLOWING PROMPT ELEMENTS
-function directory_trim() {
-    local colour=$1
-    local prefix=$2
-    local suffix=$3
-    local levels=$4
-    local length=$5
-    
-    echo -n "$prefix%f$colour"
-    echo -n "%$length<...<%$levels~"
-    echo -n "%f$suffix%f"
-}
-
 
 make
