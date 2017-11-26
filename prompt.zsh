@@ -66,12 +66,11 @@ ICON_VOLUME_2=" "
 ICON_VOLUME_1=" "
 ICON_GIT=""
 
-# Git - Need to check upstream exists
-
-#https://stackoverflow.com/questions/3258243/check-if-pull-needed-in-git
-
-# Make an alias to show du -h with ls type alias
-
+#================================== TO DO ====================================#
+# - Make du -h alias                                                          #
+# - Show number of up/downstream missing                                      #
+# - Cache computed values                                                     #
+#=============================================================================#
 
 #================================= HELPERS ===================================#
 
@@ -212,101 +211,114 @@ function privilege() {
     echo $1$2"%(!.$4.$5)"$3%f
 }
 
-#######################
-#      Network        #
-#######################
-# Requires Network Manager
+#================================= NETWORK ===================================#
+#                  Network status provided by Network Manager                 #
+#=============================================================================#
 
-# WiFi connection state as colour coded icon.
-# $1=Prefix $2=Suffix
-function wifi_status_symbolic() {   
-    echo -n "$1%f"
-    
-    local wifi_state=$(nmcli radio wifi 2> /dev/null)
-    local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
+PROMPT_WIFI_ABLE=""
+PROMPT_WIFI_ABLE_SET=false
+PROMPT_WIFI_NETWORK=""
+PROMPT_WIFI_NETWORK_SET=false
 
-    if [[ $wifi_state == "enabled" ]]; then
-        if [[ $wifi_network == "--" ]]; then
-            echo -n $WHITE
-        elif [[ $wifi_network == "(configuring)" ]]; then
-            echo -n $CYAN
-        elif [[ $wifi_network == "" ]]; then
-            echo -n $GREY
-        else
-            echo -n $GREEN
-        fi
-    else
-        echo -n $GREY
+# Helper to prevent stats being recalculated in a single prompt.
+function calculate_wifi_status() {
+    if [[ !$PROMPT_WIFI_ABLE_SET ]]; then
+        $PROMPT_WIFI_ABLE=$(nmcli radio wifi 2> /dev/null)
+        $PROMPT_WIFI_ABLE_SET=true
     fi
-    
-    echo -n "$ICON_WIFI%f$2%f"
+    if [[ !$PROMPT_WIFI_NETWORK_SET ]]; then
+        $PROMPT_WIFI_NETWORK=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d: -f2)
+        $PROMPT_WIFI_NETWORK_SET=true
+    fi
 }
 
-# WiFi connection state as text description.
-# $1=Prefix $2=Suffix
+# Return colour $1, $2, $3 if disconnected, connecting, connected.
+function colour_wifi_custom() {
+    $(calculate_wifi_status)
+    
+    if [[ $PROMPT_WIFI_ABLE == "enabled" ]]; then
+        if [[ $PROMPT_WIFI_NETWORK == "--" ]]; then
+            echo $1
+        elif [[ $PROMPT_WIFI_NETWORK == "(configuring)" ]]; then
+            echo $2
+        elif [[ $PROMPT_WIFI_NETWORK == "" ]]; then
+            echo $1
+        else
+            echo $3
+        fi
+    else
+        echo $1
+    fi
+}
+
+# Traffic light colouring for disconnected, connecting, connected.
+function colour_wifi_trafficlight() {
+    echo $(colour_wifi_custom $RED $YELLOW $GREEN)
+}
+
+# Grey, White, Cyan/$1 colouring for disconnected, connecting, connected.
+function colour_wifi_mono() {
+    echo $(colour_wifi_custom $RED $YELLOW $CYAN$1)
+}
+
+# Display custom text based on WiFi status
+# $1 = Disabled $2 = Disconnected $3 = Connecting $4 = Connected
+function wifi_status_custom() {   
+    $(calculate_wifi_status)
+
+    if [[ -z $3 ]]; then
+        $3=$PROMPT_WIFI_NETWORK
+    fi
+    
+    if [[ $wifi_state == "enabled" ]]; then
+        if [[ $PROMPT_WIFI_NETWORK == "--" ]]; then
+            echo $2
+        elif [[ $PROMPT_WIFI_NETWORK == "(configuring)" ]]; then
+            echo $3
+        elif [[ $PROMPT_WIFI_NETWORK == "" ]]; then
+            echo $2
+        else
+            echo $4
+        fi
+    else
+        echo $1
+    fi
+}
+
+# WiFi icon, intended to be used with some colour_wifi for colour.
+function wifi_status_icon() {
+    echo $1$2$ICON_WIFI$3%f
+}
+
+# Descriptive WiFi status text.
 function wifi_status_text() {
-    echo -n "$1%f"
-
-    local wifi_state=$(nmcli radio wifi 2> /dev/null)
-    local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
-
-    if [[ $wifi_state == "enabled" ]]; then
-        if [[ $wifi_network == "--" ]]; then
-            echo -n $RED"disconnected"
-        elif [[ $wifi_network == "(configuring)" ]]; then
-            echo -n $YELLOW"connecting"
-        elif [[ $wifi_network == "" ]]; then
-            echo -n $RED"disabled"
-        else
-            echo -n $GREEN"$wifi_network"
-        fi
-    else
-        echo -n $RED"disabled"
-    fi
-    
-    echo -n "%f$2%f"
+    echo $1$2$(wifi_status_custom "disabled" "disconnected" "connecting" $PROMPT_WIFI_NETWORK)$3%f
 }
 
-# WiFi connection state as text description if WiFi is enabled.
-# $1=Prefix $2=Suffix
+# Descriptive WiFi status text only if WiFi is enabled.
 function wifi_status_text_if_enabled() {
-    local wifi_state=$(nmcli radio wifi 2> /dev/null)
-    local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
-
-    if [[ $wifi_state == "enabled" ]]; then
-        if [[ $wifi_network == "--" ]]; then
-            echo -n "%f$2%f"$RED"disconnected$1%f"
-        elif [[ $wifi_network == "(configuring)" ]]; then
-            echo -n "%f$2%f"$YELLOW"connecting$1%f"
-        elif [[ $wifi_network != "" ]]; then
-            echo -n "%f$2%f"$GREEN"$wifi_network$1%f"
-        fi
-    fi
+    echo $(wifi_status_custom "" $1$2"disconnected"$3%f $1$2"connecting"$3%f $1$2$PROMPT_WIFI_NETWORK$3%f)
 }
 
-# WiFi connection state as text description if connected to a network.
-# $1=Prefix $2=Suffix $TextColour
-function wifi_status_text_if_connected() {
-    local wifi_state=$(nmcli radio wifi 2> /dev/null)
-    local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
-
-    if [[ $wifi_state == "enabled" && $wifi_network != "" && $wifi_network != "(configuring)" && $wifi_network != "--" ]]; then
-        echo -n $1%f$GREEN$3$wifi_network%f$2%f
-    fi
+# Name of connected network.
+function wifi_network_if_connected() {
+    echo $(wifi_status_custom "" "" "" $1$2$PROMPT_WIFI_NETWORK$3%f)
 }
 
-# WiFi connection strength.
-# $1=Prefix $2=Suffix $3=TextColour
+# Strength of connected network.
 function wifi_strength() {
-    local wifi_state=$(nmcli radio wifi 2> /dev/null)
-    local wifi_network=$(nmcli -t -f TYPE,CONNECTION device 2> /dev/null | grep wifi | cut -d ":" -f 2)
+    $(calculate_wifi_status)
     
-    if [[ $wifi_state == "enabled" && $wifi_network != "" && $wifi_network != "(configuring)" && $wifi_network == "--" ]]; then
-        local wifi_strength=$(nmcli -t -f IN-USE:SSID:SIGNAL device wifi 2> /dev/null | grep \*$wifi_network | cut -d ":" -f 3 )
-        if [[ $wifi_strength != "" ]]; then
-            echo -n $1%f$3$wifi_strength%%f$2%f
-        fi
-    fi
+    if [[ $PROMPT_WIFI_ABLE == "enabled" ]] && return
+    if [[ $PROMPT_WIFI_NETWORK == "--" ]] && return
+    if [[ $PROMPT_WIFI_NETWORK == "" ]] && return
+    if [[ $PROMPT_WIFI_NETWORK == "(configuring)" ]] && return
+
+    local $PROMPT_WIFI_STRENGTH=$(nmcli -t -f IN-USE:SSID:SIGNAL device wifi 2> /dev/null | grep \*$wifi_network | cut -d: -f3 )
+    
+    if [[ $wifi_strength != "" ]] && return
+    
+    echo $1$2$PROMPT_WIFI_STRENGTH%%$3%f
 }
 
 #######################
