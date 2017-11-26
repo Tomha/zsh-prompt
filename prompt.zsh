@@ -663,6 +663,8 @@ function git_behind_flag() {
 
 function preexec() {
 	timer=${timer:-$SECONDS}
+    $PROMPT_WIFI_ABLE_SET=false
+    $PROMPT_WIFI_NETWORK_SET=false
 }
 
 function precmd() {
