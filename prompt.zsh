@@ -258,7 +258,7 @@ function colour_wifi_trafficlight() {
 
 # Grey, White, Cyan/$1 colouring for disconnected, connecting, connected.
 function colour_wifi_mono() {
-    echo $(colour_wifi_custom $RED $YELLOW $CYAN$1)
+    echo $(colour_wifi_custom $GREY $WHITE $CYAN$1)
 }
 
 # Display custom text based on WiFi status
@@ -321,188 +321,238 @@ function wifi_strength() {
     echo $1$2$PROMPT_WIFI_STRENGTH%%$3%f
 }
 
-#######################
-#      Bluetooth      #
-#######################
-# Requires Bluez Utils
+#================================ BLUETOOTH ==================================#
+#                   Bluetooth status provided by Bluez Utils                  #
+#=============================================================================#
 
-function bluetooth_status_symbolic() {   
-    echo -n "$1%f"
-    
-    local bluetooth_powered=$(btmgmt info 2> /dev/null | grep "current settings:.*powered")
-    local bluetooth_info=$(echo info | bluetoothctl 2> /dev/null)
-    local bluetooth_connected=$(echo $bluetooth_info | grep Connected: | cut -d " " -f 2)
+PROMPT_BLUETOOTH_POWER_STATE=""
+PROMPT_BLUETOOTH_POWER_STATE_SET=false
+PROMPT_BLUETOOTH_INFO=""
+PROMPT_BLUETOOTH_INFO_SET=false
+PROMPT_BLUETOOTH_CONNECTION=""
+PROMPT_BLUETOOTH_CONNECTION_SET=false
+PROMPT_BLUETOOTH_DEVICE=""
+PROMPT_BLUETOOTH_DEVICE_SET=false
 
-    if [[ $bluetooth_powered != "" ]]; then
-        if [[ $bluetooth_connected == "yes" ]]; then
-            echo -n $BLUE
-        else
-            echo -n $WHITE
-        fi
-    else
-        echo -n $GREY
+function calculate_power_state() {
+    if [[ !$PROMPT_BLUETOOTH_POWER_STATE_SET ]]; then
+        PROMPT_BLUETOOTH_POWER_STATE=$(btmgmt info 2> /dev/null | grep "current settings:.*powered")
+        PROMPT_BLUETOOTH_POWER_STATE_SET=true
     fi
+}
+
+function calculate_bluetooth_info() {
+    if [[ !$PROMPT_BLUETOOTH_INFO_SET ]]; then
+        PROMPT_BLUETOOTH_INFO=$(echo info | bluetoothctl 2> /dev/null)
+        PROMPT_BLUETOOTH_INFO_SET=true
+    fi
+}
+
+function calculate_bluetooth_connection() {
+    if [[ !$PROMPT_BLUETOOTH_CONNECTION_SET ]]; then
+        $(calculate_bluetooth_info)
+        PROMPT_BLUETOOTH_CONNECTION=$(echo $PROMPT_BLUETOOTH_INFO | grep Connected: | cut -d" " -f2)
+        PROMPT_BLUETOOTH_CONNECTION_SET=true
+    fi
+}
+
+function calculate_bluetooth_device() {
+    if [[ !$PROMPT_BLUETOOTH_DEVICE_SET ]]; then
+        $(calculate_bluetooth_info)
+        PROMPT_BLUETOOTH_DEVICE=$(echo $PROMPT_BLUETOOTH_INFO | grep Name: | cut -d" " -f2)
+        PROMPT_BLUETOOTH_DEVICE_SET=true
+    fi
+}
+
+function colour_bluetooth_custom() {
+    $(calculate_bluetooth_power_state)
+    $(calculate_bluetooth_connection)
     
-    echo -n "$ICON_BLUETOOTH%f$2%f"
+    if [[ $PROMPT_BLUETOOTH_POWER_STATE == "" ]]; then
+        echo $1
+    else
+        if [[ $PROMPT_BLUETOOTH_CONNECTION == "yes" ]]; then
+            echo $3
+        else
+            echo $2
+        fi
+    fi
+}
+
+function colour_bluetooth_custom() {
+    echo $(colour_bluetooth_custom $GREY $WHITE $BLUE$1)
+}
+
+function bluetooth_status_custom() {
+    $(calculate_bluetooth_power_state)
+    $(calculate_bluetooth_connection)
+    
+    if [[ $PROMPT_BLUETOOTH_POWER_STATE == "" ]]; then
+        echo $1
+    else
+        if [[ $PROMPT_BLUETOOTH_CONNECTION == "yes" ]]; then
+            echo $3
+        else
+            echo $2
+        fi
+    fi
+}
+
+# Bluetooth icon, intended to be used with some colour_wifi for colour.
+function bluetooth_status_symbolic() {
+        echo $1$2$ICON_BLUETOOTH$3%f
 }
 
 function bluetooth_status_text() {
-    local bluetooth_powered=$(btmgmt info 2> /dev/null | grep "current settings:.*powered")
-    local bluetooth_info=$(echo info | bluetoothctl 2> /dev/null)
-    local bluetooth_connected=$(echo $bluetooth_info | grep Connected: | cut -d " " -f 2)
-    local bluetooth_name=$(echo $bluetooth_info | grep Name: | cut -d " " -f 2)
-
-    if [[ $bluetooth_powered != "" ]]; then
-        if [[ $bluetooth_connected == "yes" ]]; then
-            echo -n "%f$1%f$BLUE$bluetooth_name$2%f"
-        else
-            echo -n "%f$1%f"$WHITE"disconnected$2%f"
-        fi
-    else
-        echo -n "%f$1%f"$GREY"disabled$2%f"
-    fi
+        $(calculate_bluetooth_device)
+        echo $1$2$(bluetooth_status_custom "disabled" "disconnected" $PROMPT_BLUETOOTH_DEVICE)$3%f
 }
 
 function bluetooth_status_text_if_connected() {
-    local bluetooth_powered=$(btmgmt info 2> /dev/null | grep "current settings:.*powered")
-    local bluetooth_info=$(echo info | bluetoothctl 2> /dev/null)
-    local bluetooth_connected=$(echo $bluetooth_info | grep Connected: | cut -d " " -f 2)
-    local bluetooth_name=$(echo $bluetooth_info | grep Name: | cut -d " " -f 2)
+        $(calculate_bluetooth_device)
+        echo $1$2$(bluetooth_status_custom "" $1$2"disconnected"$3%f $1$2$PROMPT_BLUETOOTH_DEVICE$3%f)
+}
 
-    if [[ $bluetooth_powered != "" && $bluetooth_connected == "yes" ]]; then
-        echo -n "%f$1%f$BLUE$bluetooth_name$2%f"
+#================================= BATTERY ===================================#
+#                        Battery stats provided by acpi                       #
+#=============================================================================#
+
+PROMPT_BATTERY_INFO=""
+PROMPT_BATTERY_INFO_SET=false
+PROMPT_BATTERY_STATE=""
+PROMPT_BATTERY_STATE_SET=false
+PROMPT_BATTERY_PERCENT=""
+PROMPT_BATTERY_PERCENT_SET=false
+PROMPT_BATTERY_TIME=""
+PROMPT_BATTERY_TIME_SET=false
+
+# Helper to prevent raw battery info being recalculated in a single prompt.
+function calculate_battery_info() {
+    if [[ !$PROMPT_BATTERY_INFO_SET ]]; then
+        PROMPT_BATTERY_INFO=$(acpi 2> /dev/null | tr -d, | cut -d " " -f3)
+        PROMPT_BATTERY_INFO_SET=true
     fi
 }
 
-#######################
-#       Battery       #
-#######################
-# Requires acpi
+# Helper to prevent battery state being recalculated in a single prompt.
+function calculate_battery_state() {
+    if [[ !$PROMPT_BATTERY_STATE_SET ]]; then
+        $(calculate_battery_info)
+        PROMPT_BATTERY_STATE=$(echo $PROMPT_BATTERY_INFO | tr -d, | cut -d " " -f3)
+        PROMPT_BATTERY_STATE_SET=true
+    fi
+}
 
+# Helper to prevent battery percentage being recalculated in a single prompt.
+function calculate_battery_percent() {
+    if [[ !$PROMPT_BATTERY_PERCENT_SET ]]; then
+        $(calculate_battery_info)
+        PROMPT_BATTERY_PERCENT=$(echo $PROMPT_BATTERY_INFO | tr -d, | cut -d " " -f4)
+        PROMPT_BATTERY_PERCENT_SET=true
+    fi
+}
+
+# Helper to prevent battery time being recalculated in a single prompt.
+function calculate_battery_time() {
+    if [[ !$PROMPT_BATTERY_TIME_SET ]]; then
+        $(calculate_battery_info)
+        PROMPT_BATTERY_TIME=$(echo $PROMPT_BATTERY_INFO | tr -d, | cut -d " " -f5)
+        PROMPT_BATTERY_TIME_SET=true
+    fi
+}
+
+# Return colour $1, $2, $3 if battery percent 0-25%, 25-75%, 70+%
+function colour_battery_percent_custom() {
+    $(calculate_battery_percent)
+    
+    if (( $PROMPT_BATTERY_PERCENT > 75 )); then
+        echo $3
+    elif (( $PROMPT_BATTERY_PERCENT > 25 )); then
+        echo $2
+    else
+        echo $1
+    fi
+}
+
+# Return colour $1, $2, $3 if discharging, charging, charged.
+function colour_battery_state_custom() {
+    $(calculate_battery_state)
+        
+    if [[ $PROMPT_BATTERY_STATE == "Discharging" ]]; then
+        echo $1
+    elif [[ $PROMPT_BATTERY_STATE == "Charging" ]]; then
+        echo $2
+    elif [[ $PROMPT_BATTERY_STATE == "Charged" ]]; then
+        echo $3
+    fi
+}
+
+# Traffic light colouring for battery percent 0-25%, 25-75%, 70+%
+function colour_battery_percent() {
+    echo $(colour_battery_percent_custom $RED $YELLOW $GREEN)
+}
+
+# Traffic light colouring for discharging, charging, charged.
+function colour_battery_state() {
+    echo $(colour_battery_state_custom $RED $YELLOW $GREEN)
+}
+
+# Display custom text based on battery state
+# $1 = Discharging $2 = Charging $3 = Connected
+function battery_status_custom() {
+    $(calculate_battery_state)
+        
+    if [[ $PROMPT_BATTERY_STATE == "Discharging" ]]; then
+        echo $1
+    elif [[ $PROMPT_BATTERY_STATE == "Charging" ]]; then
+        echo $2
+    elif [[ $PROMPT_BATTERY_STATE == "Charged" ]]; then
+        echo $3
+    fi
+}
+
+# Battery status as an icon.
 function battery_status_symbolic() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",")
-    local battery_status=$(echo $battery_info | cut -d " " -f 3)
-    
-    echo -n "%f$1%f"
-        
-    if [[ $battery_status == "Discharging" ]]; then
-        echo -n "$RED↓"
-    elif [[ $battery_status == "Charging" ]]; then
-        echo -n "$YELLOW↑"
-    elif [[ $battery_status == "Charged" ]]; then
-        echo -n "$GREEN✓"
-    fi
-        
-    echo -n "%f$2%f"
+    echo $1$2$(battery_state_custom "↓" "↑" "✓")$3%f
 }
 
+# Descriptive battery status text (Charging, discharging, charged)
 function battery_status_text() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",")
-    local battery_status=$(echo $battery_info | cut -d " " -f 3)
-    echo -n "%f$1%f$3$battery_status%f$2%f"
+    $(calculate_battery_state)
+    echo $1$2$PROMPT_BATTERY_STATE$3%f
 }
 
+# Battery percentage as an icon
 function battery_percentage_symbolic() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",%")
-    local battery_percentage=$(echo $battery_info | cut -d " " -f 4)
+    $(calculate_battery_percent)
 
-    echo -n "%f$1%f"
+    echo $1$2
     
-    if (( $battery_percentage > 95 )); then
-        echo -n $GREEN$ICON_BATTERY_5
-    elif (( $battery_percentage > 75 )); then
-        echo -n $YELLOW$ICON_BATTERY_4
-    elif (( $battery_percentage > 50 )); then
-        echo -n $YELLOW$ICON_BATTERY_3
-    elif (( $battery_percentage > 5 )); then
-        echo -n $RED$ICON_BATTERY_2
+    if (( $PROMPT_BATTERY_PERCENT > 95 )); then
+        echo $ICON_BATTERY_5
+    elif (( $PROMPT_BATTERY_PERCENT > 70 )); then
+        echo $ICON_BATTERY_4
+    elif (( $PROMPT_BATTERY_PERCENT > 30 )); then
+        echo $ICON_BATTERY_3
+    elif (( $PROMPT_BATTERY_PERCENT > 5 )); then
+        echo $ICON_BATTERY_2
     else
-        echo -n $RED$ICON_BATTERY_1
+        echo $ICON_BATTERY_1
     fi
     
-    echo -n "%f$2%f"
+    echo $3%f
 }
 
+# Battery percentage
 function battery_percentage_text() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",%")
-    local battery_percentage=$(echo $battery_info | cut -d " " -f 4)
-
-    echo -n "%f$1%f"
-    
-    if (( $battery_percentage > 75 )); then
-        echo -n $GREEN
-    elif (( $battery_percentage > 25 )); then
-        echo -n $YELLOW
-    else
-        echo -n $RED
-    fi
-    
-    echo -n "$battery_percentage%%%f$2%f"
+    $(calculate_battery_percent)
+    echo $1$2$PROMPT_BATTERY_PERCENT%%$3%f
 }
 
+# Time until battery dis/charged
 function battery_time_remaining() {
-    local battery_info=$(acpi 2> /dev/null | tr -d ",")
-    local battery_time=$(echo $battery_info | cut -d " " -f 5)
-    local battery_status=$(echo $battery_info | cut -d " " -f 3)
-    
-    echo -n "%f$1%f"
-
-    if [[ $battery_status == "Discharging" ]]; then
-        echo -n $RED
-    elif [[ $battery_status == "Charging" ]]; then
-        echo -n $YELLOW
-    elif [[ $battery_status == "Charged" ]]; then
-        echo -n $GREEN
-    fi
-    
-    echo -n "$battery_time%f$2%f"
-}
-
-#######################
-#       Volume        #
-#######################
-# Requires amixer
-
-# TODO: Volume icons that work
-
-function volume_symbolic() {
-    local volume_info=$(amixer | grep "Front Left: Playback" | tr -d "[]:%")
-    local volume_power=$(echo $volume_info | cut -d " " -f 8)
-    local volume_level=$(echo $volume_info | cut -d " " -f 7)
-    
-    echo -n "%f$1%f$3"
-    
-    if [[ $volume_power == "off" ]]; then
-        echo -n $ICON_VOLUME_MUTE
-    else
-        if (( $volume_level > 75 )); then
-            echo -n $ICON_VOLUME_3
-        elif (( $volume_level > 25 )); then
-            echo -n $ICON_VOLUME_2
-        elif (( $volume_level > 5 )); then
-            echo -n $ICON_VOLUME_1
-        else
-            echo -n $ICON_VOLUME_MUTE
-        fi
-    fi
-
-    echo -n "%f$2%f"
-}
-
-function volume_text() {
-    local volume_info=$(amixer | grep "Front Left: Playback" | tr -d "[]:%")
-    local volume_power=$(echo $volume_info | cut -d " " -f 8)
-    local volume_level=$(echo $volume_info | cut -d " " -f 7)
-    
-    echo -n "%f$1%f$3"
-    
-    if [[ $volume_power == "off" ]]; then
-        echo -n "muted"
-    else
-        echo -n "$volume_level%%"
-    fi
-
-    echo -n "%f$2%f"
+    $(calculate_battery_time)   
+    echo $1$2$battery_time$3%f
 }
 
 #######################
@@ -663,8 +713,16 @@ function git_behind_flag() {
 
 function preexec() {
 	timer=${timer:-$SECONDS}
-    $PROMPT_WIFI_ABLE_SET=false
-    $PROMPT_WIFI_NETWORK_SET=false
+    PROMPT_WIFI_ABLE_SET=false
+    PROMPT_WIFI_NETWORK_SET=false
+    PROMPT_BATTERY_INFO_SET=false
+    PROMPT_BATTERY_STATE_SET=false
+    PROMPT_BATTERY_PERCENT_SET=false
+    PROMPT_BATTERY_TIME_SET=false
+    PROMPT_BLUETOOTH_POWER_STATE_SET=false
+    PROMPT_BLUETOOTH_INFO_SET=false
+    PROMPT_BLUETOOTH_CONNECTION_SET=false
+    PROMPT_BLUETOOTH_DEVICE_SET=false
 }
 
 function precmd() {
